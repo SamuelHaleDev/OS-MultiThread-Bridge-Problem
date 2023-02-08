@@ -4,11 +4,14 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define NUM_ITERS 50
+
 pthread_mutex_t mut; // mutex variable
 pthread_cond_t cond; // condition variable
 
 int currentDirec; // the current direction on the one lane bridge
 int currentNumber; // the currentNumber of cars on the bridge
+int CarNum = 0;
 
 struct arg_struct { // so I can pass car number through in pthread_create
     int carNum;
@@ -23,26 +26,23 @@ bool isSafe(int direc);
 
 // Purpose calling function from pthread_create, allows each thread to emulate car, enter, cross and exit bridge
 void *OneVehicle(void *arguments) { 
-    pthread_mutex_lock(&mut);
-    struct arg_struct *args = (struct arg_struct *)arguments;
-    int carNum = args->carNum;
+    CarNum++;
     int direc = rand() % 2;
-    pthread_mutex_unlock(&mut);
-    ArriveBridge(direc, carNum);
-    CrossBridge(direc, carNum);
-    ExitBridge(direc, carNum);
+    ArriveBridge(direc, CarNum);
+    CrossBridge(direc, CarNum);
+    ExitBridge(direc, CarNum);
     sched_yield();
 }
 
 // Purpose is to handle bridge arrival per pseudocode provided
 void ArriveBridge(int direc, int carNum) {
+    pthread_mutex_lock(&mut);
+    printf("Car %d arriving at bridge\n", carNum);
     while(!isSafe(direc)) {
-        pthread_mutex_lock(&mut);
         pthread_cond_wait(&cond, &mut);
-        pthread_mutex_unlock(&mut);
     } 
-
-    printf("Car %d entering bridge\n", carNum);
+    currentNumber++;
+    pthread_mutex_unlock(&mut);
     sched_yield();
 }
 
@@ -51,7 +51,7 @@ void ExitBridge(int direc, int carNum) {
     pthread_mutex_lock(&mut);
     printf("Car %d exiting bridge\n", carNum);
     currentNumber = currentNumber - 1;
-    pthread_cond_broadcast(&cond);
+    pthread_cond_signal(&cond);
     pthread_mutex_unlock(&mut);
     sched_yield();
 }
@@ -66,16 +66,13 @@ bool isSafe(int direc) {
 // Purpose is mainly for debugging to see when a thread enters this portion of the code
 void CrossBridge(int direc, int carNum) {
     pthread_mutex_lock(&mut);
-    if(currentDirec != 0 || currentDirec != 1) currentDirec = direc;
-    currentNumber += 1;
-    pthread_mutex_unlock(&mut);
-        if(direc == 0) {
+    if(direc == 0) {
         printf("Car %d crossing bridge heading North. Current number of cars on bridge: %d\n", carNum, currentNumber);
     }
-
     else {
         printf("Car %d crossing bridge heading South. Current number of cars on bridge: %d\n", carNum, currentNumber);
     }
+    pthread_mutex_unlock(&mut);
     sched_yield();
 }
 
@@ -88,20 +85,15 @@ int main() {
     pthread_cond_init(&cond, NULL);
     currentNumber = 0;
     
-    for(int i = 0; i < numChildren; i++) {
+    for(int i = 0; i < NUM_ITERS; i++) {
         args.carNum = i+1;
-        int ret = pthread_create(&id[i], NULL, &OneVehicle, (void *)&args);
-        if(ret != 0) {
-            perror("Failed to create thread");
-            return 1;
-        }// create 50 threads one for each car
-
+        pthread_create(&id[i], NULL, &OneVehicle, NULL);
     }
     for(int i = 0; i < numChildren; i++) {
-        if(pthread_join(id[i], NULL) != 0) {
-            return 2;
-        }
+        pthread_join(id[i], NULL);
     }
+    pthread_cond_destroy(&cond);
+    pthread_mutex_destroy(&mut);
     pthread_exit(0);
     return 0;
 }
