@@ -26,11 +26,12 @@ bool isSafe(int direc);
 
 // Purpose calling function from pthread_create, allows each thread to emulate car, enter, cross and exit bridge
 void *OneVehicle(void *arguments) { 
-    CarNum++;
+    int CarNum = *((int *) arguments);
     int direc = rand() % 2;
     ArriveBridge(direc, CarNum);
     CrossBridge(direc, CarNum);
     ExitBridge(direc, CarNum);
+    pthread_exit(NULL);
     sched_yield();
 }
 
@@ -49,8 +50,8 @@ void ArriveBridge(int direc, int carNum) {
 // Purpose is to handle bridge exit per pseudo code provided
 void ExitBridge(int direc, int carNum) {
     pthread_mutex_lock(&mut);
-    printf("Car %d exiting bridge\n", carNum);
     currentNumber = currentNumber - 1;
+    printf("Car %d exiting bridge. Current number of cars on the bridge %d\n", carNum, currentNumber);
     pthread_cond_signal(&cond);
     pthread_mutex_unlock(&mut);
     sched_yield();
@@ -86,8 +87,9 @@ int main() {
     currentNumber = 0;
     
     for(int i = 0; i < NUM_ITERS; i++) {
-        args.carNum = i+1;
-        pthread_create(&id[i], NULL, &OneVehicle, NULL);
+        int *arg = (int *)malloc(sizeof(*arg));
+        *arg = i+1;
+        pthread_create(&id[i], NULL, &OneVehicle, arg);
     }
     for(int i = 0; i < numChildren; i++) {
         pthread_join(id[i], NULL);
